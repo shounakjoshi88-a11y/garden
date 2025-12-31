@@ -1,0 +1,174 @@
+name: garden
+
+# Runs the daily engineering checks and commits the results.
+#
+# Each check becomes its own commit. GitHub counts commits per day for the
+# contribution graph, so several small real commits turn one faint square into
+# a solid one - without inventing any work.
+#
+# The commits are authored with a real GitHub-verified identity, so GitHub
+# attributes them to the account rather than to the Actions bot.
+
+on:
+  push:
+    branches: [main]
+    # Garden's own commits only ever touch ops/, so they never re-trigger this
+    # workflow. Anything else you push does.
+    paths:
+      - 'garden/**'
+      - 'garden.config.json'
+      - 'README.md'
+      - '.garden/**'
+  schedule:
+    # Three runs a day, deliberately off the hour: every scheduled action fires
+    # at :00 and that queue is the worst of the day.
+    - cron: "13 4 * * *"    # 09:43 IST
+    - cron: "37 12 * * *"   # 18:07 IST
+    - cron: "9 20 * * *"    # 01:39 IST
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "backfill = top up missing days, rebuild = redo the whole history"
+        required: false
+        default: "backfill"
+      backfill_from:
+        description: "From this date (YYYY-MM-DD), inclusive"
+        required: false
+        default: ""
+      backfill_to:
+        description: "Up to this date (YYYY-MM-DD), inclusive"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: garden
+  cancel-in-progress: true
+
+jobs:
+  day:
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.request.outputs.mode }}
+      from: ${{ steps.request.outputs.from }}
+      to: ${{ steps.request.outputs.to }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GARDEN_PAT || github.token }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install garden
+        run: pip install -e .
+
+      - name: Use a real git identity
+        run: |
+          git config user.name "Shounak Joshi"
+          git config user.email "shounakjoshi88@gmail.com"
+
+      - name: Read the request
+        id: request
+        env:
+          REQUEST_MODE: ${{ inputs.mode }}
+          REQUEST_FROM: ${{ inputs.backfill_from }}
+          REQUEST_TO: ${{ inputs.backfill_to }}
+        run: |
+          MODE="$REQUEST_MODE"; FROM="$REQUEST_FROM"; TO="$REQUEST_TO"
+          if [ -f .garden/request.json ]; then
+            MODE=$(python -c "import json;print(json.load(open('.garden/request.json')).get('mode','backfill'))")
+            FROM=$(python -c "import json;print(json.load(open('.garden/request.json')).get('from',''))")
+            TO=$(python -c "import json;print(json.load(open('.garden/request.json')).get('to',''))")
+          fi
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "from=$FROM" >> "$GITHUB_OUTPUT"
+          echo "to=$TO" >> "$GITHUB_OUTPUT"
+          echo "mode=$MODE from=$FROM to=$TO"
+
+      - name: Fill a gap in the history
+        if: ${{ steps.request.outputs.mode != 'rebuild' && steps.request.outputs.from != '' }}
+        env:
+          GARDEN_TOKEN: ${{ secrets.GARDEN_PAT || github.token }}
+          GARDEN_PAT: ${{ secrets.GARDEN_PAT }}
+          GARDEN_WORKDIR: ${{ github.workspace }}/.fleet
+        run: |
+          python -m garden backfill \
+            --from "${{ steps.request.outputs.from }}" \
+            --to "${{ steps.request.outputs.to }}" \
+            --tasks metrics --tasks todos --tasks notes --push
+
+      - name: Heal any missed days
+        env:
+          GARDEN_TOKEN: ${{ secrets.GARDEN_PAT || github.token }}
+          GARDEN_PAT: ${{ secrets.GARDEN_PAT }}
+          GARDEN_WORKDIR: ${{ github.workspace }}/.fleet
+        run: |
+          python -m garden backfill \
+            --from "$(date -u -d '35 days ago' +%Y-%m-%d)" \
+            --to "$(date -u -d '1 day ago' +%Y-%m-%d)" \
+            --tasks metrics --tasks todos --tasks notes --push
+
+      - name: Run the day
+        env:
+          GARDEN_TOKEN: ${{ secrets.GARDEN_PAT || github.token }}
+          GARDEN_PAT: ${{ secrets.GARDEN_PAT }}
+          GARDEN_WORKDIR: ${{ github.workspace }}/.fleet
+        run: python -m garden day --push
+
+      - name: Push fleet repos
+        if: always()
+        env:
+          GARDEN_TOKEN: ${{ secrets.GARDEN_PAT || github.token }}
+        run: python -m garden push-fleet
+
+      - name: Consume the request
+        if: ${{ always() && steps.request.outputs.from != '' }}
+        run: |
+          if [ -f .garden/request.json ]; then
+            git rm -q .garden/request.json
+            git commit -q -m "chore: consume garden request"
+            git push || true
+          fi
+
+  rebuild:
+    # Runs last, and force-pushes a freshly built history over the default
+    # branch. Everything the day job produced is included in the rebuild, so
+    # the two cannot disagree.
+    needs: day
+    if: ${{ needs.day.outputs.mode == 'rebuild' && needs.day.outputs.from != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GARDEN_PAT || github.token }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install garden
+        run: pip install -e .
+
+      - name: Use a real git identity
+        run: |
+          git config user.name "Shounak Joshi"
+          git config user.email "shounakjoshi88@gmail.com"
+
+      - name: Rebuild the history
+        env:
+          GARDEN_TOKEN: ${{ secrets.GARDEN_PAT || github.token }}
+          GARDEN_PAT: ${{ secrets.GARDEN_PAT }}
+          GARDEN_WORKDIR: ${{ github.workspace }}/.fleet
+        run: |
+          python -m garden rebuild \
+            --from "${{ needs.day.outputs.from }}" \
+            --to "${{ needs.day.outputs.to }}" \
+            --source "$GITHUB_WORKSPACE" \
+            --workdir "$GITHUB_WORKSPACE/.rebuild" \
+            --push

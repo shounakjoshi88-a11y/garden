@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "ops_repo": {
+    "path": ".",
+    "clone": "shounakjoshi88-a11y/garden"
+  },
+  "tasks": ["metrics", "todos", "notes"],
+  "max_commits_per_day": 12,
+  "commit_hour": 12,
+  "author_name": "Shounak Joshi",
+  "author_email": "shounakjoshi88@gmail.com",
+  "topics": [
+    "systems thinking",
+    "testing strategy",
+    "performance",
+    "API design",
+    "failure modes",
+    "readability"
+  ],
+  "sources": [],
+  "notes_dir": "notes",
+  "fleet": [
+    {
+      "name": "profile",
+      "clone": "shounakjoshi88-a11y/shounakjoshi88-a11y",
+      "tasks": ["metrics", "todos"],
+      "enabled": true,
+      "write_ops_here": true
+    },
+    {
+      "name": "meridian",
+      "clone": "shounakjoshi88-a11y/meridian",
+      "tasks": ["metrics", "todos", "notes"],
+      "enabled": true,
+      "write_ops_here": true
+    },
+    {
+      "name": "ai-news",
+      "clone": "shounakjoshi88-a11y/ai-news",
+      "tasks": ["metrics", "todos"],
+      "enabled": true,
+      "write_ops_here": true
+    },
+    {
+      "name": "studydesk",
+      "clone": "shounakjoshi88-a11y/studydesk",
+      "tasks": ["metrics", "todos"],
+      "enabled": true,
+      "write_ops_here": true
+    },
+    {
+      "name": "flux",
+      "clone": "shounakjoshi88-a11y/Flux",
+      "tasks": ["metrics", "todos"],
+      "enabled": true,
+      "write_ops_here": true
+    },
+    {
+      "name": "raksha",
+      "clone": "shounakjoshi88-a11y/raksha-crowd-safety-hackathon",
+      "tasks": ["metrics", "todos"],
+      "enabled": true,
+      "write_ops_here": true
+    }
+  ]
+}
