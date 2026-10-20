@@ -16,6 +16,7 @@ on:
     # workflow. Anything else you push does.
     paths:
       - 'garden/**'
+      - '.github/**'
       - 'garden.config.json'
       - 'README.md'
       - '.garden/**'
@@ -55,12 +56,12 @@ jobs:
       from: ${{ steps.request.outputs.from }}
       to: ${{ steps.request.outputs.to }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           token: ${{ secrets.GARDEN_PAT || github.token }}
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -143,12 +144,12 @@ jobs:
     if: ${{ needs.day.outputs.mode == 'rebuild' && needs.day.outputs.from != '' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           token: ${{ secrets.GARDEN_PAT || github.token }}
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
